@@ -1,0 +1,4 @@
+plugin: community.kubernetes.k8s
+connections:
+  - kubeconfig: ~/.kube/config
+    context: 'gke_s4-project-202316_us-central1-c_prod-cluster'

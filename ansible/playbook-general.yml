@@ -1,0 +1,145 @@
+---
+- hosts: localhost
+  name: create namepsace and install helm charts
+  gather_facts: false
+  connection: local
+
+  collections:
+  - community.kubernetes
+
+  tasks:
+
+  - name: Add success4 helm chart repo
+    community.kubernetes.helm_repository:
+      name: success4
+      repo_url: "https://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@raw.githubusercontent.com/success4us/charts/master/success4/"
+    tags: [ layerci, general, sseks ]
+
+  - name: Add nginx helm chart repo
+    community.kubernetes.helm_repository:
+      name: nginx-ingress
+      repo_url: "https://helm.nginx.com/stable"
+    tags: [ layerci ]
+
+  - name: Git clone success4 charts repo on HEAD for helm chart
+    ansible.builtin.git:
+      repo: https://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@github.com/success4us/charts.git
+      dest: /tmp/helm_repo
+      force: yes
+    become: yes
+    tags: [ layerci, general, sseks ]
+
+#  - name: Create Nginx-ingress namespace
+#    community.kubernetes.k8s:
+#      name: nginx-ingress
+#      api_version: v1
+#      kind: Namespace
+#      state: present
+#    tags: [ layerci, general, sseks ]
+
+  - name: Deploy latest success4 version of nginx-ingress chart
+    community.kubernetes.helm:
+      name: nginx-ingress
+      chart_ref: success4/nginx-ingress
+      release_namespace: nginx-ingress
+      values:
+        rbac.create: true
+        controller.publishService.enabled: true
+      state: present
+    tags: [ general, sseks ]
+
+  - name: Deploy latest success4 version of nginx-ingress chart layerci
+    community.kubernetes.helm:
+      name: nginx-ingress
+      chart_ref: success4/nginx-ingress
+      release_namespace: default
+    tags: layerci
+
+  - name: Create a k8s namespace
+    community.kubernetes.k8s:
+      state: present
+      definition:
+        apiVersion: v1
+        kind: Namespace
+        metadata:
+          name: cert-manager
+          labels:
+            certmanager.k8s.io/disable-validation: "true"
+    tags: [ layerci, general, sseks ]
+    
+  - name: Create CRD for cert-manager
+    community.kubernetes.k8s:
+      state: present
+      src: ./cert-manager-crds.yaml
+    tags: [ layerci, general, sseks ]
+      
+  - name: Add helm chart repo
+    community.kubernetes.helm_repository:
+      name: jetstack
+      repo_url: https://charts.jetstack.io
+    tags: [ layerci, general, sseks ]
+
+  - name: Add helm chart repo
+    community.kubernetes.helm_repository:
+      name: grafana
+      repo_url: https://grafana.github.io/helm-charts
+    tags: [ general, sseks ]
+
+  - name: Deploy latest stable version of cert-manager chart
+    community.kubernetes.helm:
+      name: cert-manager
+      chart_ref: jetstack/cert-manager
+      chart_version: 0.10.0
+      release_namespace: cert-manager
+      values:
+        webhook.enabled: false
+      state: present
+    tags: [ layerci, general, sseks ]
+
+  - name: wait for certmanager
+    shell: |
+      sleep 30s
+      kubectl wait --for=condition=ready --timeout=1m pod -l app=webhook -n cert-manager
+    tags: [ layerci, general ]
+
+  - name: Deploy latest stable version of Minio chart
+    community.kubernetes.helm:
+      name: minio-gcs
+      chart_ref: success4/minio-gcs
+      release_namespace: default
+      values: "{{ lookup('file', '/tmp/helm_repo/values/minio-gcs-values.yaml') | from_yaml }}"
+      state: present
+    tags: general
+
+  - name: Create Prometheus namespace
+    community.kubernetes.k8s:
+      name: prometheus
+      api_version: v1
+      kind: Namespace
+      state: present
+    tags: [ general, sseks ]
+
+  - name: Deploy latest stable version of Prometheus chart
+    community.kubernetes.helm:
+      name: prometheus
+      chart_ref: success4/prometheus-operator
+      release_namespace: prometheus
+      state: present
+    tags: [ general, sseks ]
+
+  - name: Deploy latest stable version of grafana chart
+    community.kubernetes.helm:
+      name: grafana
+      chart_ref: success4/grafana
+      release_namespace: prometheus
+      values: "{{ lookup('file', '/tmp/helm_repo/values/grafana-values.yaml') | from_yaml }}"
+      state: present
+    tags: [ general, sseks ]
+
+  - name: DNS configuration
+    shell: |
+      INGRESS_IP=$(kubectl get service nginx-ingress-controller | tail -1 | cut -d" " -f 10)
+      ./utilities/daddy add -d cs1.io -t A -v $INGRESS_IP -n prod.minio  --key=9uFzfJdERXW_C6anzLFYVeKYPrvZgYq1tL --secret=G74dxWYXg42VfveEP47HAj
+    args:
+      executable: /bin/bash
+    tags: general

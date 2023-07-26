@@ -40,3 +40,6 @@ ENV KUBECONFIG=/etc/rancher/k3s/k3s.yaml
 RUN curl https://raw.githubusercontent.com/helm/helm/master/scripts/get-helm-3 | bash
 
 # Clone s4-infrastructure
+RUN pip3 install -r ansible-requirments.txt && \
+    cd ansible && ansible-galaxy collection install -r requirements.yml && \
+    ansible-playbook playbook-general.yml -i k8s.yml --tags "layerci"
