@@ -27,8 +27,6 @@ MEMORY 15G
 
 # Login to GitHub container registry
 
-SECRET ENV CR_PAT
-RUN echo $CR_PAT | docker login ghcr.io -u success4us --password-stdin
 
 
 # Install & start k3s
