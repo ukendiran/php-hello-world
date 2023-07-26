@@ -1,20 +1,44 @@
-#Use an Ubuntu 18.04 base for our staging server
 FROM vm/ubuntu:18.04
+SKIP REMAINING IF GIT_BRANCH!=~^(master|feature)$
+# Install the latest version of Docker, as in the official Docker installation tutorial.
 
-# To note: Layerfiles create entire VMs, *not* containers!
+RUN apt-get update && \
+    apt-get install apt-transport-https ca-certificates curl software-properties-common dnsmasq libvirt-dev && \
+    curl -fsSL https://download.docker.com/linux/ubuntu/gpg | apt-key add - && \
+    add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu bionic stable" && \
+    apt-get update && \
+    apt install docker-ce
+    
 
-# Install python
-RUN apt update
+# Install Python 3 and pip3
 
-RUN apt install software-properties-common ca-certificates lsb-release apt-transport-https 
+RUN apt-get update && \
+    apt-get install python3.8 python3-pip python-pip
+
+# Install ansible
+
+RUN pip3 install ansible==4.9.0
+
+# Install jq
+
+RUN apt-get -y install jq
+
+MEMORY 15G
+
+# Login to GitHub container registry
+
+SECRET ENV CR_PAT
+RUN echo $CR_PAT | docker login ghcr.io -u success4us --password-stdin
 
 
-RUN apt update 
+# Install & start k3s
 
-RUN apt install php
+RUN curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION=v1.21.2+k3s1 sh -s - --docker --disable traefik
 
-WORKDIR /var/www/html/
+ENV KUBECONFIG=/etc/rancher/k3s/k3s.yaml
 
-COPY . .
+# Install helm3
 
-EXPOSE WEBSITE http://localhost:80
+RUN curl https://raw.githubusercontent.com/helm/helm/master/scripts/get-helm-3 | bash
+
+# Clone s4-infrastructure
